@@ -8,7 +8,7 @@
     "enabled": true
   },
   "vars": {
-    "OPENWHOOP_ANALYSIS_URL": "",
+    "OPENWHOOP_ANALYSIS_URL": "https://mimo-analysis-upstream.hilloy15.workers.dev",
     "OPENWHOOP_ANALYSIS_API_KEY": "",
     "BACKEND_API_KEY": ""
   }
