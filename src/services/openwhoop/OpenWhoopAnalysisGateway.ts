@@ -30,6 +30,7 @@ export interface OpenWhoopAnalysisGateway {
     startIso?: string;
     endIso?: string;
   }): Promise<OpenWhoopSleepResponse>;
+  debugInfo?(): Record<string, unknown>;
 }
 
 export class ServiceBindingOpenWhoopAnalysisGateway
@@ -95,6 +96,13 @@ export class ServiceBindingOpenWhoopAnalysisGateway
       throw new Error("Upstream analysis response schema mismatch");
     }
     return parsed.data;
+  }
+
+  debugInfo(): Record<string, unknown> {
+    return {
+      gateway: "service-binding",
+      hasApiKey: Boolean(this.apiKey)
+    };
   }
 
   private async fetchWithRetry(
@@ -165,6 +173,12 @@ export class MockOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
       }
     };
   }
+
+  debugInfo(): Record<string, unknown> {
+    return {
+      gateway: "mock"
+    };
+  }
 }
 
 export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
@@ -231,6 +245,14 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
       throw new Error("Upstream analysis response schema mismatch");
     }
     return parsed.data;
+  }
+
+  debugInfo(): Record<string, unknown> {
+    return {
+      gateway: "http",
+      baseUrl: this.baseUrl,
+      hasApiKey: Boolean(this.apiKey)
+    };
   }
 
   private async fetchWithRetry(

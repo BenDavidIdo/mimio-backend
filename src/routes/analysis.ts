@@ -17,9 +17,11 @@ export function registerAnalysisRoutes(
   }
 ): void {
   app.get("/analysis/upstream-health", async (c) => {
-    const result = await getGateway(c.env).ping();
+    const gateway = getGateway(c.env);
+    const result = await gateway.ping();
     return c.json({
       ...result,
+      debug: gateway.debugInfo?.() ?? null,
       requestId: c.get("requestId")
     });
   });
