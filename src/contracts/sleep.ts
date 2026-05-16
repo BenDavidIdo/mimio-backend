@@ -6,10 +6,27 @@ import { z } from "zod";
 // FAILURE MODE: Invalid payloads fail fast at request boundary with structured validation errors.
 export const sleepAnalysisRequestSchema = z
   .object({
-    dbPath: z.string().min(1),
+    dbPath: z.string().min(1).optional(),
+    gravitySamples: z
+      .array(
+        z.object({
+          time: z.string().datetime(),
+          x: z.number(),
+          y: z.number(),
+          z: z.number()
+        })
+      )
+      .optional(),
     startIso: z.string().datetime().optional(),
     endIso: z.string().datetime().optional()
   })
+  .refine(
+    (value) => Boolean(value.dbPath) || Boolean(value.gravitySamples?.length),
+    {
+      message: "Provide either dbPath or at least one gravity sample",
+      path: ["dbPath"]
+    }
+  )
   .refine(
     (value) => {
       if (!value.startIso || !value.endIso) return true;

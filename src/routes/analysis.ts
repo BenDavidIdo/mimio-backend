@@ -14,6 +14,7 @@ export function registerAnalysisRoutes(
       latencyMs?: number;
       upstreamStatus?: number;
     }>;
+    debugInfo?: () => Record<string, unknown>;
   }
 ): void {
   app.get("/analysis/upstream-health", async (c) => {

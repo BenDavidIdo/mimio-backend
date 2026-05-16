@@ -51,18 +51,23 @@ export function createApp(): Hono<Env> {
   app.use("/analysis/*", rateLimitMiddleware);
   const buildGateway = (workerBindings: WorkerBindings): OpenWhoopAnalysisGateway => {
     const bindings = parseBindings(workerBindings);
+    // SOURCE OF TRUTH: UpstreamGatewaySelectionPolicy
+    // BOUNDARY: Chooses which upstream adapter routes analysis traffic.
+    // INVARIANT: Explicit OPENWHOOP_ANALYSIS_URL wins over service binding.
+    // FAILURE MODE: Falls back to mock gateway when no upstream config exists.
+    if (bindings.OPENWHOOP_ANALYSIS_URL) {
+      return new HttpOpenWhoopAnalysisGateway(
+        bindings.OPENWHOOP_ANALYSIS_URL,
+        bindings.OPENWHOOP_ANALYSIS_API_KEY
+      );
+    }
     if (workerBindings.UPSTREAM_ANALYSIS) {
       return new ServiceBindingOpenWhoopAnalysisGateway(
         workerBindings.UPSTREAM_ANALYSIS,
         bindings.OPENWHOOP_ANALYSIS_API_KEY
       );
     }
-    return bindings.OPENWHOOP_ANALYSIS_URL
-      ? new HttpOpenWhoopAnalysisGateway(
-          bindings.OPENWHOOP_ANALYSIS_URL,
-          bindings.OPENWHOOP_ANALYSIS_API_KEY
-        )
-      : new MockOpenWhoopAnalysisGateway();
+    return new MockOpenWhoopAnalysisGateway();
   };
 
   registerAnalysisRoutes(

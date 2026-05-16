@@ -136,4 +136,35 @@ describe("worker routes", () => {
     expect(json.mode).toBe("upstream");
     expect(json.upstreamStatus).toBe(200);
   });
+
+  it("prefers OPENWHOOP_ANALYSIS_URL over service binding when both exist", async () => {
+    const res = await app.request(
+      "http://localhost/analysis/upstream-health",
+      undefined,
+      {
+        OPENWHOOP_ANALYSIS_URL: "https://example.com",
+        OPENWHOOP_ANALYSIS_API_KEY: "",
+        BACKEND_API_KEY: "",
+        RATE_LIMIT_MAX: "60",
+        RATE_LIMIT_WINDOW_MS: "60000",
+        UPSTREAM_ANALYSIS: {
+          fetch: async () =>
+            new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { "content-type": "application/json" }
+            })
+        }
+      }
+    );
+
+    // URL gateway hits example.com/health which should not be 200 in test env.
+    // If service binding was incorrectly prioritized this would be 200.
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      mode: string;
+      debug?: { gateway?: string };
+    };
+    expect(json.mode).toBe("upstream");
+    expect(json.debug?.gateway).toBe("http");
+  });
 });

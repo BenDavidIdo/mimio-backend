@@ -1,10 +1,23 @@
 import { z } from "zod";
 
 const upstreamRequestSchema = z.object({
-  dbPath: z.string().min(1),
+  dbPath: z.string().min(1).optional(),
+  gravitySamples: z
+    .array(
+      z.object({
+        time: z.string().datetime(),
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      })
+    )
+    .optional(),
   startIso: z.string().datetime().nullable(),
   endIso: z.string().datetime().nullable()
-});
+}).refine(
+  (value) => Boolean(value.dbPath) || Boolean(value.gravitySamples?.length),
+  { message: "Either dbPath or gravitySamples is required", path: ["dbPath"] }
+);
 
 const upstreamSleepResponseSchema = z.object({
   summary: z.string(),
@@ -26,7 +39,8 @@ export interface OpenWhoopAnalysisGateway {
     upstreamStatus?: number;
   }>;
   analyzeSleep(input: {
-    dbPath: string;
+    dbPath?: string;
+    gravitySamples?: Array<{ time: string; x: number; y: number; z: number }>;
     startIso?: string;
     endIso?: string;
   }): Promise<OpenWhoopSleepResponse>;
@@ -66,12 +80,14 @@ export class ServiceBindingOpenWhoopAnalysisGateway
   }
 
   async analyzeSleep(input: {
-    dbPath: string;
+    dbPath?: string;
+    gravitySamples?: Array<{ time: string; x: number; y: number; z: number }>;
     startIso?: string;
     endIso?: string;
   }): Promise<OpenWhoopSleepResponse> {
     const payload = upstreamRequestSchema.parse({
       dbPath: input.dbPath,
+      gravitySamples: input.gravitySamples,
       startIso: input.startIso ?? null,
       endIso: input.endIso ?? null
     });
@@ -159,7 +175,8 @@ export class MockOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
   }
 
   async analyzeSleep(input: {
-    dbPath: string;
+    dbPath?: string;
+    gravitySamples?: Array<{ time: string; x: number; y: number; z: number }>;
     startIso?: string;
     endIso?: string;
   }): Promise<OpenWhoopSleepResponse> {
@@ -168,6 +185,7 @@ export class MockOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
       source: "mock",
       details: {
         dbPath: input.dbPath,
+        gravitySamples: input.gravitySamples?.length ?? 0,
         startIso: input.startIso ?? null,
         endIso: input.endIso ?? null
       }
@@ -212,12 +230,14 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
   }
 
   async analyzeSleep(input: {
-    dbPath: string;
+    dbPath?: string;
+    gravitySamples?: Array<{ time: string; x: number; y: number; z: number }>;
     startIso?: string;
     endIso?: string;
   }): Promise<OpenWhoopSleepResponse> {
     const payload = upstreamRequestSchema.parse({
       dbPath: input.dbPath,
+      gravitySamples: input.gravitySamples,
       startIso: input.startIso ?? null,
       endIso: input.endIso ?? null
     });
