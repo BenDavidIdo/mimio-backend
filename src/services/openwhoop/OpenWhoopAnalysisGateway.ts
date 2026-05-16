@@ -19,16 +19,46 @@ const upstreamRequestSchema = z.object({
   { message: "Either dbPath or gravitySamples is required", path: ["dbPath"] }
 );
 
-const upstreamSleepResponseSchema = z.object({
+const canonicalSleepResponseSchema = z.object({
   summary: z.string(),
   source: z.string(),
   details: z.record(z.unknown())
+});
+
+const mockUpstreamSleepResponseSchema = z.object({
+  ok: z.boolean(),
+  source: z.string(),
+  requestSummary: z.object({
+    hasGravity: z.boolean(),
+    gravityCount: z.number()
+  }).optional(),
+  sleep: z.unknown().optional()
 });
 
 export interface OpenWhoopSleepResponse {
   summary: string;
   source: string;
   details: Record<string, unknown>;
+}
+
+function parseUpstreamSleepResponse(body: unknown): OpenWhoopSleepResponse {
+  const canonical = canonicalSleepResponseSchema.safeParse(body);
+  if (canonical.success) return canonical.data;
+
+  const mock = mockUpstreamSleepResponseSchema.safeParse(body);
+  if (mock.success) {
+    return {
+      summary: "Sleep analysis completed.",
+      source: mock.data.source,
+      details: {
+        ok: mock.data.ok,
+        requestSummary: mock.data.requestSummary ?? null,
+        sleep: mock.data.sleep ?? null
+      }
+    };
+  }
+
+  throw new Error("Upstream analysis response schema mismatch");
 }
 
 export interface OpenWhoopAnalysisGateway {
@@ -107,11 +137,7 @@ export class ServiceBindingOpenWhoopAnalysisGateway
     }
 
     const body = await response.json().catch(() => null);
-    const parsed = upstreamSleepResponseSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new Error("Upstream analysis response schema mismatch");
-    }
-    return parsed.data;
+    return parseUpstreamSleepResponse(body);
   }
 
   debugInfo(): Record<string, unknown> {
@@ -260,11 +286,7 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
     }
 
     const body = await response.json().catch(() => null);
-    const parsed = upstreamSleepResponseSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new Error("Upstream analysis response schema mismatch");
-    }
-    return parsed.data;
+    return parseUpstreamSleepResponse(body);
   }
 
   debugInfo(): Record<string, unknown> {
