@@ -75,6 +75,92 @@ describe("worker routes", () => {
     expect(json.mode).toBe("mock");
   });
 
+  it("returns analysis library catalog", async () => {
+    const res = await app.request(
+      "http://localhost/analysis/library-catalog",
+      undefined,
+      {
+        OPENWHOOP_ANALYSIS_URL: "",
+        OPENWHOOP_ANALYSIS_API_KEY: "",
+        BACKEND_API_KEY: "",
+        RATE_LIMIT_MAX: "60",
+        RATE_LIMIT_WINDOW_MS: "60000"
+      }
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      recommendedStack?: { sleep?: string[] };
+      options?: Array<{ id: string }>;
+    };
+    expect(json.recommendedStack?.sleep).toBeTruthy();
+    expect(json.options?.some((x) => x.id === "asleep")).toBe(true);
+  });
+
+  it("reprocesses historical series and returns cleaned payload", async () => {
+    const res = await app.request(
+      "http://localhost/analysis/reprocess-history",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          heartRate: [
+            { time: "2026-05-16T00:00:00Z", value: 65 },
+            { time: "2026-05-16T00:00:10Z", value: 66 },
+            { time: "2026-05-16T00:00:20Z", value: 250 }
+          ],
+          gravity: [
+            { time: "2026-05-16T00:00:00Z", x: 0.0, y: 0.0, z: 1.0 },
+            { time: "2026-05-16T00:00:10Z", x: 0.001, y: 0.0, z: 1.001 },
+            { time: "2026-05-16T00:00:20Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:00:30Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:00:40Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:00:50Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:01:00Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:01:10Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:01:20Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:01:30Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:01:40Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:01:50Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:02:00Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:02:10Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:02:20Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:02:30Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:02:40Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:02:50Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:03:00Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:03:10Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:03:20Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:03:30Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:03:40Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:03:50Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:04:00Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:04:10Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:04:20Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:04:30Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:04:40Z", x: 0.001, y: 0.001, z: 1.0 },
+            { time: "2026-05-16T00:04:50Z", x: 0.001, y: 0.001, z: 1.0 }
+          ]
+        })
+      },
+      {
+        OPENWHOOP_ANALYSIS_URL: "",
+        OPENWHOOP_ANALYSIS_API_KEY: "",
+        BACKEND_API_KEY: "",
+        RATE_LIMIT_MAX: "60",
+        RATE_LIMIT_WINDOW_MS: "60000"
+      }
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      cleaned?: { heartRate?: unknown[] };
+      stats?: { droppedCounts?: { heartRate?: number } };
+      requestId?: string;
+    };
+    expect(json.cleaned?.heartRate?.length).toBe(2);
+    expect(json.stats?.droppedCounts?.heartRate).toBe(1);
+    expect(typeof json.requestId).toBe("string");
+  });
+
   it("rate limits over threshold", async () => {
     const bindings = {
       OPENWHOOP_ANALYSIS_URL: "",

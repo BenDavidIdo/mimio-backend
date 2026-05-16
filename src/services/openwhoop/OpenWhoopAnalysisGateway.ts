@@ -19,6 +19,49 @@ const upstreamRequestSchema = z.object({
   { message: "Either dbPath or gravitySamples is required", path: ["dbPath"] }
 );
 
+const upstreamReprocessRequestSchema = z
+  .object({
+    dbPath: z.string().min(1).optional(),
+    startIso: z.string().datetime().nullable().optional(),
+    endIso: z.string().datetime().nullable().optional(),
+    heartRate: z
+      .array(z.object({ time: z.string().datetime(), value: z.number() }))
+      .default([]),
+    hrv: z
+      .array(z.object({ time: z.string().datetime(), value: z.number() }))
+      .default([]),
+    respiratoryRate: z
+      .array(z.object({ time: z.string().datetime(), value: z.number() }))
+      .default([]),
+    spo2: z
+      .array(z.object({ time: z.string().datetime(), value: z.number() }))
+      .default([]),
+    temperatureC: z
+      .array(z.object({ time: z.string().datetime(), value: z.number() }))
+      .default([]),
+    gravity: z
+      .array(
+        z.object({
+          time: z.string().datetime(),
+          x: z.number(),
+          y: z.number(),
+          z: z.number()
+        })
+      )
+      .default([])
+  })
+  .refine(
+    (value) =>
+      Boolean(value.dbPath) ||
+      value.heartRate.length > 0 ||
+      value.hrv.length > 0 ||
+      value.respiratoryRate.length > 0 ||
+      value.spo2.length > 0 ||
+      value.temperatureC.length > 0 ||
+      value.gravity.length > 0,
+    { message: "Provide dbPath or at least one sample series", path: ["dbPath"] }
+  );
+
 const canonicalSleepResponseSchema = z.object({
   summary: z.string(),
   source: z.string(),
@@ -41,6 +84,14 @@ export interface OpenWhoopSleepResponse {
   details: Record<string, unknown>;
 }
 
+export interface OpenWhoopReprocessResponse {
+  summary: string;
+  source: string;
+  cleaned: Record<string, unknown>;
+  sleep: Record<string, unknown> | null;
+  stats: Record<string, unknown>;
+}
+
 function parseUpstreamSleepResponse(body: unknown): OpenWhoopSleepResponse {
   const canonical = canonicalSleepResponseSchema.safeParse(body);
   if (canonical.success) return canonical.data;
@@ -61,6 +112,21 @@ function parseUpstreamSleepResponse(body: unknown): OpenWhoopSleepResponse {
   throw new Error("Upstream analysis response schema mismatch");
 }
 
+const canonicalReprocessResponseSchema = z.object({
+  summary: z.string(),
+  source: z.string(),
+  cleaned: z.record(z.unknown()),
+  sleep: z.record(z.unknown()).nullable(),
+  stats: z.record(z.unknown())
+});
+
+function parseUpstreamReprocessResponse(body: unknown): OpenWhoopReprocessResponse {
+  const parsed = canonicalReprocessResponseSchema.safeParse(body);
+  if (parsed.success) return parsed.data;
+
+  throw new Error("Upstream reprocess response schema mismatch");
+}
+
 export interface OpenWhoopAnalysisGateway {
   ping(): Promise<{
     ok: boolean;
@@ -74,6 +140,17 @@ export interface OpenWhoopAnalysisGateway {
     startIso?: string;
     endIso?: string;
   }): Promise<OpenWhoopSleepResponse>;
+  analyzeReprocess(input: {
+    dbPath?: string;
+    startIso?: string;
+    endIso?: string;
+    heartRate?: Array<{ time: string; value: number }>;
+    hrv?: Array<{ time: string; value: number }>;
+    respiratoryRate?: Array<{ time: string; value: number }>;
+    spo2?: Array<{ time: string; value: number }>;
+    temperatureC?: Array<{ time: string; value: number }>;
+    gravity?: Array<{ time: string; x: number; y: number; z: number }>;
+  }): Promise<OpenWhoopReprocessResponse>;
   debugInfo?(): Record<string, unknown>;
 }
 
@@ -138,6 +215,49 @@ export class ServiceBindingOpenWhoopAnalysisGateway
 
     const body = await response.json().catch(() => null);
     return parseUpstreamSleepResponse(body);
+  }
+
+  async analyzeReprocess(input: {
+    dbPath?: string;
+    startIso?: string;
+    endIso?: string;
+    heartRate?: Array<{ time: string; value: number }>;
+    hrv?: Array<{ time: string; value: number }>;
+    respiratoryRate?: Array<{ time: string; value: number }>;
+    spo2?: Array<{ time: string; value: number }>;
+    temperatureC?: Array<{ time: string; value: number }>;
+    gravity?: Array<{ time: string; x: number; y: number; z: number }>;
+  }): Promise<OpenWhoopReprocessResponse> {
+    const payload = upstreamReprocessRequestSchema.parse({
+      dbPath: input.dbPath,
+      startIso: input.startIso ?? null,
+      endIso: input.endIso ?? null,
+      heartRate: input.heartRate ?? [],
+      hrv: input.hrv ?? [],
+      respiratoryRate: input.respiratoryRate ?? [],
+      spo2: input.spo2 ?? [],
+      temperatureC: input.temperatureC ?? [],
+      gravity: input.gravity ?? []
+    });
+
+    const response = await this.fetchWithRetry(
+      "https://upstream/analysis/reprocess-history",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Upstream analysis failed (${response.status}): ${body}`);
+    }
+    const body = await response.json().catch(() => null);
+    return parseUpstreamReprocessResponse(body);
   }
 
   debugInfo(): Record<string, unknown> {
@@ -218,6 +338,58 @@ export class MockOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
     };
   }
 
+  async analyzeReprocess(input: {
+    dbPath?: string;
+    startIso?: string;
+    endIso?: string;
+    heartRate?: Array<{ time: string; value: number }>;
+    hrv?: Array<{ time: string; value: number }>;
+    respiratoryRate?: Array<{ time: string; value: number }>;
+    spo2?: Array<{ time: string; value: number }>;
+    temperatureC?: Array<{ time: string; value: number }>;
+    gravity?: Array<{ time: string; x: number; y: number; z: number }>;
+  }): Promise<OpenWhoopReprocessResponse> {
+    return {
+      summary: "Mock reprocess active. Set OPENWHOOP_ANALYSIS_URL for real upstream.",
+      source: "mock",
+      cleaned: {
+        heartRate: input.heartRate ?? [],
+        hrv: input.hrv ?? [],
+        respiratoryRate: input.respiratoryRate ?? [],
+        spo2: input.spo2 ?? [],
+        temperatureC: input.temperatureC ?? [],
+        gravity: input.gravity ?? []
+      },
+      sleep: null,
+      stats: {
+        inputCounts: {
+          heartRate: input.heartRate?.length ?? 0,
+          hrv: input.hrv?.length ?? 0,
+          respiratoryRate: input.respiratoryRate?.length ?? 0,
+          spo2: input.spo2?.length ?? 0,
+          temperatureC: input.temperatureC?.length ?? 0,
+          gravity: input.gravity?.length ?? 0
+        },
+        outputCounts: {
+          heartRate: input.heartRate?.length ?? 0,
+          hrv: input.hrv?.length ?? 0,
+          respiratoryRate: input.respiratoryRate?.length ?? 0,
+          spo2: input.spo2?.length ?? 0,
+          temperatureC: input.temperatureC?.length ?? 0,
+          gravity: input.gravity?.length ?? 0
+        },
+        droppedCounts: {
+          heartRate: 0,
+          hrv: 0,
+          respiratoryRate: 0,
+          spo2: 0,
+          temperatureC: 0,
+          gravity: 0
+        }
+      }
+    };
+  }
+
   debugInfo(): Record<string, unknown> {
     return {
       gateway: "mock"
@@ -287,6 +459,49 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
 
     const body = await response.json().catch(() => null);
     return parseUpstreamSleepResponse(body);
+  }
+
+  async analyzeReprocess(input: {
+    dbPath?: string;
+    startIso?: string;
+    endIso?: string;
+    heartRate?: Array<{ time: string; value: number }>;
+    hrv?: Array<{ time: string; value: number }>;
+    respiratoryRate?: Array<{ time: string; value: number }>;
+    spo2?: Array<{ time: string; value: number }>;
+    temperatureC?: Array<{ time: string; value: number }>;
+    gravity?: Array<{ time: string; x: number; y: number; z: number }>;
+  }): Promise<OpenWhoopReprocessResponse> {
+    const payload = upstreamReprocessRequestSchema.parse({
+      dbPath: input.dbPath,
+      startIso: input.startIso ?? null,
+      endIso: input.endIso ?? null,
+      heartRate: input.heartRate ?? [],
+      hrv: input.hrv ?? [],
+      respiratoryRate: input.respiratoryRate ?? [],
+      spo2: input.spo2 ?? [],
+      temperatureC: input.temperatureC ?? [],
+      gravity: input.gravity ?? []
+    });
+
+    const response = await this.fetchWithRetry(
+      this.endpointUrl("/analysis/reprocess-history"),
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Upstream analysis failed (${response.status}): ${body}`);
+    }
+    const body = await response.json().catch(() => null);
+    return parseUpstreamReprocessResponse(body);
   }
 
   debugInfo(): Record<string, unknown> {

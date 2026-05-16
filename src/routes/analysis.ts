@@ -1,8 +1,13 @@
 import { Hono } from "hono";
 import type { WorkerBindings } from "../config/env.js";
 import type { SleepAnalysisService } from "../services/sleep/SleepAnalysisService.js";
+import { CleanWindowService } from "../services/clean/CleanWindowService.js";
+import { HistoryReprocessService } from "../services/history/HistoryReprocessService.js";
+import { AnalysisLibraryCatalogService } from "../services/library/AnalysisLibraryCatalogService.js";
 import type { RequestContextVariables } from "../middleware/requestContext.js";
 import { sleepAnalysisRequestSchema } from "../contracts/sleep.js";
+import { cleanWindowRequestSchema } from "../contracts/cleanWindow.js";
+import { reprocessHistoryRequestSchema } from "../contracts/reprocess.js";
 
 export function registerAnalysisRoutes(
   app: Hono<{ Bindings: WorkerBindings; Variables: RequestContextVariables }>,
@@ -17,6 +22,17 @@ export function registerAnalysisRoutes(
     debugInfo?: () => Record<string, unknown>;
   }
 ): void {
+  const cleanWindowService = new CleanWindowService();
+  const historyReprocessService = new HistoryReprocessService();
+  const libraryCatalogService = new AnalysisLibraryCatalogService();
+
+  app.get("/analysis/library-catalog", (c) => {
+    return c.json({
+      ...libraryCatalogService.getCatalog(),
+      requestId: c.get("requestId")
+    });
+  });
+
   app.get("/analysis/upstream-health", async (c) => {
     const gateway = getGateway(c.env);
     const result = await gateway.ping();
@@ -41,6 +57,48 @@ export function registerAnalysisRoutes(
       );
     }
     const result = await getSleepService(c.env).analyze(parsed.data);
+    return c.json({
+      ...result,
+      requestId: c.get("requestId")
+    });
+  });
+
+  app.post("/analysis/clean-window", async (c) => {
+    const json = await c.req.json().catch(() => null);
+    const parsed = cleanWindowRequestSchema.safeParse(json);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "invalid_request",
+          details: parsed.error.flatten(),
+          requestId: c.get("requestId")
+        },
+        400
+      );
+    }
+
+    const result = cleanWindowService.clean(parsed.data);
+    return c.json({
+      ...result,
+      requestId: c.get("requestId")
+    });
+  });
+
+  app.post("/analysis/reprocess-history", async (c) => {
+    const json = await c.req.json().catch(() => null);
+    const parsed = reprocessHistoryRequestSchema.safeParse(json);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "invalid_request",
+          details: parsed.error.flatten(),
+          requestId: c.get("requestId")
+        },
+        400
+      );
+    }
+
+    const result = historyReprocessService.reprocess(parsed.data);
     return c.json({
       ...result,
       requestId: c.get("requestId")

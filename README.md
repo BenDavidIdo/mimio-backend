@@ -47,7 +47,10 @@ If `BACKEND_API_KEY` is set, send:
 - `GET /health`
 - `GET /openapi.json`
 - `GET /analysis/upstream-health`
+- `GET /analysis/library-catalog`
 - `POST /analysis/sleep`
+- `POST /analysis/clean-window`
+- `POST /analysis/reprocess-history`
 
 All responses include `x-request-id` header for tracing.
 
@@ -68,6 +71,24 @@ curl -X POST "https://<your-worker>.workers.dev/analysis/sleep" \
   -H "content-type: application/json" \
   -H "authorization: Bearer <BACKEND_API_KEY>" \
   -d '{"dbPath":"/tmp/openwhoop-data/openwhoop.db"}'
+```
+
+Historical reprocess sample:
+
+```bash
+curl -X POST "https://<your-worker>.workers.dev/analysis/reprocess-history" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer <BACKEND_API_KEY>" \
+  -d '{
+    "heartRate":[
+      {"time":"2026-05-16T00:00:00Z","value":65},
+      {"time":"2026-05-16T00:00:10Z","value":66}
+    ],
+    "gravity":[
+      {"time":"2026-05-16T00:00:00Z","x":0.0,"y":0.0,"z":1.0},
+      {"time":"2026-05-16T00:00:10Z","x":0.001,"y":0.001,"z":1.001}
+    ]
+  }'
 ```
 
 ## Layout

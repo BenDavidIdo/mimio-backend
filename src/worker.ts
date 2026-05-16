@@ -38,7 +38,8 @@ export function createApp(): Hono<Env> {
         "/health",
         "/openapi.json",
         "/analysis/upstream-health",
-        "/analysis/sleep"
+        "/analysis/sleep",
+        "/analysis/clean-window"
       ]
     })
   );
