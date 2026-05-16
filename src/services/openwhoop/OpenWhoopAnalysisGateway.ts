@@ -69,7 +69,9 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey?: string
-  ) {}
+  ) {
+    this.baseUrl = this.normalizeBaseUrl(baseUrl);
+  }
 
   async ping(): Promise<{
     ok: boolean;
@@ -78,7 +80,7 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
     upstreamStatus?: number;
   }> {
     const started = Date.now();
-    const response = await this.fetchWithRetry(`${this.baseUrl}/health`, {
+    const response = await this.fetchWithRetry(this.endpointUrl("/health"), {
       method: "GET"
     });
     return {
@@ -100,14 +102,17 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
       endIso: input.endIso ?? null
     });
 
-    const response = await this.fetchWithRetry(`${this.baseUrl}/analysis/sleep`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
-      },
-      body: JSON.stringify(payload)
-    });
+    const response = await this.fetchWithRetry(
+      this.endpointUrl("/analysis/sleep"),
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
+        },
+        body: JSON.stringify(payload)
+      }
+    );
 
     if (!response.ok) {
       const body = await response.text();
@@ -160,5 +165,18 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
 
   private async wait(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private normalizeBaseUrl(raw: string): string {
+    const trimmed = raw.trim().replace(/\/+$/, "");
+    // Accept both:
+    // 1) https://host
+    // 2) https://host/analysis/sleep
+    // and normalize to https://host
+    return trimmed.replace(/\/analysis\/sleep$/i, "");
+  }
+
+  private endpointUrl(path: string): string {
+    return `${this.baseUrl}${path}`;
   }
 }
