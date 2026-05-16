@@ -1,0 +1,24 @@
+{
+  "name": "mimo-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "cf-typegen": "wrangler types",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.9.6",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260515.0",
+    "@types/node": "^24.0.7",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.69.1"
+  }
+}
