@@ -168,12 +168,15 @@ export class HttpOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
   }
 
   private normalizeBaseUrl(raw: string): string {
-    const trimmed = raw.trim().replace(/\/+$/, "");
-    // Accept both:
-    // 1) https://host
-    // 2) https://host/analysis/sleep
-    // and normalize to https://host
-    return trimmed.replace(/\/analysis\/sleep$/i, "");
+    const trimmed = raw.trim();
+    // Accept full URLs with any path/query and normalize to origin only.
+    // This makes OPENWHOOP_ANALYSIS_URL robust to dashboard copy/paste mistakes.
+    try {
+      return new URL(trimmed).origin;
+    } catch {
+      // Fall back to conservative normalization if URL parsing fails.
+      return trimmed.replace(/\/+$/, "").replace(/\/analysis\/sleep$/i, "");
+    }
   }
 
   private endpointUrl(path: string): string {
