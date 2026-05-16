@@ -101,5 +101,39 @@ describe("worker routes", () => {
     );
     expect(third.status).toBe(429);
   });
-});
 
+  it("uses service binding for upstream health when provided", async () => {
+    const res = await app.request(
+      "http://localhost/analysis/upstream-health",
+      undefined,
+      {
+        OPENWHOOP_ANALYSIS_URL: "",
+        OPENWHOOP_ANALYSIS_API_KEY: "",
+        BACKEND_API_KEY: "",
+        RATE_LIMIT_MAX: "60",
+        RATE_LIMIT_WINDOW_MS: "60000",
+        UPSTREAM_ANALYSIS: {
+          fetch: async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.endsWith("/health")) {
+              return new Response(JSON.stringify({ ok: true }), {
+                status: 200,
+                headers: { "content-type": "application/json" }
+              });
+            }
+            return new Response("not found", { status: 404 });
+          }
+        }
+      }
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      ok: boolean;
+      mode: string;
+      upstreamStatus: number;
+    };
+    expect(json.ok).toBe(true);
+    expect(json.mode).toBe("upstream");
+    expect(json.upstreamStatus).toBe(200);
+  });
+});

@@ -32,6 +32,112 @@ export interface OpenWhoopAnalysisGateway {
   }): Promise<OpenWhoopSleepResponse>;
 }
 
+export class ServiceBindingOpenWhoopAnalysisGateway
+  implements OpenWhoopAnalysisGateway
+{
+  // SOURCE OF TRUTH: OpenWhoopServiceBindingGateway
+  // BOUNDARY: Calls upstream analysis Worker through Cloudflare service bindings.
+  // INVARIANT: Upstream routes are invoked as internal Worker-to-Worker requests.
+  // FAILURE MODE: Throws with status/body context when upstream fails.
+  constructor(
+    private readonly upstream: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    },
+    private readonly apiKey?: string
+  ) {}
+
+  async ping(): Promise<{
+    ok: boolean;
+    mode: "upstream";
+    latencyMs?: number;
+    upstreamStatus?: number;
+  }> {
+    const started = Date.now();
+    const response = await this.fetchWithRetry("https://upstream/health", {
+      method: "GET"
+    });
+    return {
+      ok: response.ok,
+      mode: "upstream",
+      latencyMs: Date.now() - started,
+      upstreamStatus: response.status
+    };
+  }
+
+  async analyzeSleep(input: {
+    dbPath: string;
+    startIso?: string;
+    endIso?: string;
+  }): Promise<OpenWhoopSleepResponse> {
+    const payload = upstreamRequestSchema.parse({
+      dbPath: input.dbPath,
+      startIso: input.startIso ?? null,
+      endIso: input.endIso ?? null
+    });
+
+    const response = await this.fetchWithRetry("https://upstream/analysis/sleep", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Upstream analysis failed (${response.status}): ${body}`);
+    }
+
+    const body = await response.json().catch(() => null);
+    const parsed = upstreamSleepResponseSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new Error("Upstream analysis response schema mismatch");
+    }
+    return parsed.data;
+  }
+
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit
+  ): Promise<Response> {
+    let lastError: unknown;
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+      try {
+        const response = await this.upstream.fetch(url, {
+          ...init,
+          signal: controller.signal
+        });
+        if (response.status >= 500 && attempt < maxAttempts) {
+          await this.wait(attempt * 300);
+          continue;
+        }
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxAttempts) {
+          await this.wait(attempt * 300);
+          continue;
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    throw new Error(
+      `Upstream request failed after retries: ${
+        lastError instanceof Error ? lastError.message : "unknown error"
+      }`
+    );
+  }
+
+  private async wait(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}
+
 export class MockOpenWhoopAnalysisGateway implements OpenWhoopAnalysisGateway {
   // SOURCE OF TRUTH: CloudflareMockOpenWhoopGateway
   // BOUNDARY: Dev-safe analysis adapter when no upstream Rust service is configured.

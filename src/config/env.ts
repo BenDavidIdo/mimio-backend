@@ -15,6 +15,9 @@ const bindingSchema = z.object({
 });
 
 export type WorkerBindings = {
+  UPSTREAM_ANALYSIS?: {
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  };
   OPENWHOOP_ANALYSIS_URL?: string;
   OPENWHOOP_ANALYSIS_API_KEY?: string;
   BACKEND_API_KEY?: string;

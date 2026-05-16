@@ -5,6 +5,7 @@ import { registerAnalysisRoutes } from "./routes/analysis.js";
 import { registerOpenApiRoute } from "./routes/openapi.js";
 import {
   HttpOpenWhoopAnalysisGateway,
+  ServiceBindingOpenWhoopAnalysisGateway,
   MockOpenWhoopAnalysisGateway,
   type OpenWhoopAnalysisGateway
 } from "./services/openwhoop/OpenWhoopAnalysisGateway.js";
@@ -50,6 +51,12 @@ export function createApp(): Hono<Env> {
   app.use("/analysis/*", rateLimitMiddleware);
   const buildGateway = (workerBindings: WorkerBindings): OpenWhoopAnalysisGateway => {
     const bindings = parseBindings(workerBindings);
+    if (workerBindings.UPSTREAM_ANALYSIS) {
+      return new ServiceBindingOpenWhoopAnalysisGateway(
+        workerBindings.UPSTREAM_ANALYSIS,
+        bindings.OPENWHOOP_ANALYSIS_API_KEY
+      );
+    }
     return bindings.OPENWHOOP_ANALYSIS_URL
       ? new HttpOpenWhoopAnalysisGateway(
           bindings.OPENWHOOP_ANALYSIS_URL,
