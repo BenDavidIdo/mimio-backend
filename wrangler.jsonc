@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mimo-backend",
-  "account_id": "dd970b6b20251adcd82063f196a184a3",
+  "account_id": "af3414f28bc43bae315f55824141ba60",
   "main": "src/worker.ts",
   "compatibility_date": "2026-05-15",
   "keep_vars": true,
